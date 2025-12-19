@@ -1,15 +1,21 @@
 package routes
 
 import (
-    "chat-backend/controllers"
-    "github.com/gin-gonic/gin"
-    "go.mongodb.org/mongo-driver/mongo"
+	"chat-backend/config"
+	"chat-backend/controllers"
+
+	"github.com/gin-gonic/gin"
 )
 
-func ChatRoutes(router *gin.Engine, db *mongo.Database) {
-    chatGroup := router.Group("/chats")
-    {
-        chatGroup.POST("/", func(c *gin.Context) { controllers.CreateChat(c, db) })
-        chatGroup.GET("/:chatID", func(c *gin.Context) { controllers.GetChatByID(c, db) })
-    }
+func ChatRoutes(router *gin.Engine, appConfig *config.Config) {
+	chatGroup := router.Group("/chats")
+	{
+		chatGroup.POST("/", controllers.CreateChat)
+		chatGroup.GET("/:chatID", func(c *gin.Context) {
+			controllers.GetChatByID(c, appConfig)
+		})
+		chatGroup.GET("/user/:userID", func(c *gin.Context) {
+			controllers.GetUserChats(c, appConfig)
+		})
+	}
 }

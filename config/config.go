@@ -1,43 +1,115 @@
 package config
 
 import (
-    "log"
-    "os"
+	"context"
+	"log"
+	"os"
+	"time"
 
-    "github.com/joho/godotenv"
+	"github.com/joho/godotenv"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
+	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/google"
 )
 
 type Config struct {
-    MongoURI         string
-    JWTSecret        string
-    GoogleClientID   string
-    GoogleSecret     string
-    GoogleCallbackURL string
+	MongoURI          string
+	DBName            string
+	JWTSecret         string
+	GoogleClientID    string
+	GoogleSecret      string
+	GoogleCallbackURL string
+	GoogleOAuthConfig *oauth2.Config
+	DB                *mongo.Database
+	Redis             *RedisConfig
 }
 
-// LoadConfig loads environment variables from .env or system environment
+// LoadConfig membaca konfigurasi dari .env atau environment variable
 func LoadConfig() (*Config, error) {
-    // Load .env file if it exists
-    err := godotenv.Load()
-    if err != nil {
-        log.Println("No .env file found, using environment variables")
-    }
+	_ = godotenv.Load() // Tidak perlu error handling, cukup gunakan env default
 
-    config := &Config{
-        MongoURI:          getEnv("MONGO_URI", "mongodb://localhost:27017"),
-        JWTSecret:         getEnv("JWT_SECRET", "your-jwt-secret"),
-        GoogleClientID:    getEnv("GOOGLE_CLIENT_ID", ""),
-        GoogleSecret:      getEnv("GOOGLE_CLIENT_SECRET", ""),
-        GoogleCallbackURL: getEnv("GOOGLE_CALLBACK_URL", "/user/auth/google/callback"),
-    }
+	config := &Config{
+		MongoURI:          getEnv("MONGO_URI", "mongodb://localhost:27017"),
+		DBName:            getEnv("DB_NAME", "chatapp"),
+		JWTSecret:         getEnv("JWT_SECRET", "your-jwt-secret"),
+		GoogleClientID:    getEnv("GOOGLE_CLIENT_ID", ""),
+		GoogleSecret:      getEnv("GOOGLE_CLIENT_SECRET", ""),
+		GoogleCallbackURL: getEnv("GOOGLE_CALLBACK_URL", "/user/auth/google/callback"),
+		Redis: &RedisConfig{
+			Addr:     getEnv("REDIS_ADDR", "localhost:6379"),
+			Password: getEnv("REDIS_PASSWORD", ""),
+			DB:       0,
+		},
+	}
 
-    return config, nil
+	// Inisialisasi Google OAuth Config
+	config.GoogleOAuthConfig = &oauth2.Config{
+		ClientID:     config.GoogleClientID,
+		ClientSecret: config.GoogleSecret,
+		RedirectURL:  config.GoogleCallbackURL,
+		Scopes: []string{
+			"https://www.googleapis.com/auth/userinfo.email",
+			"https://www.googleapis.com/auth/userinfo.profile",
+		},
+		Endpoint: google.Endpoint,
+	}
+
+	return config, nil
 }
 
-// Helper function to get the environment variable or return a default value
+// ConnectDB menghubungkan ke MongoDB dan mengembalikan instance database
+func (c *Config) ConnectDB() error {
+	clientOptions := options.Client().ApplyURI(c.MongoURI)
+	client, err := mongo.NewClient(clientOptions)
+	if err != nil {
+		return err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := client.Connect(ctx); err != nil {
+		return err
+	}
+
+	c.DB = client.Database(c.DBName)
+	log.Println("✅ Connected to MongoDB")
+	return nil
+}
+
+// ConnectRedis connects to Redis
+func (c *Config) ConnectRedis() error {
+	return c.Redis.ConnectRedis()
+}
+
+// Disconnect menutup koneksi MongoDB dan Redis
+func (c *Config) Disconnect() error {
+	var lastErr error
+
+	// Disconnect from MongoDB
+	if c.DB != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := c.DB.Client().Disconnect(ctx); err != nil {
+			lastErr = err
+		}
+	}
+
+	// Disconnect from Redis
+	if c.Redis != nil {
+		if err := c.Redis.Disconnect(); err != nil {
+			lastErr = err
+		}
+	}
+
+	return lastErr
+}
+
+// getEnv membaca variabel lingkungan atau menggunakan default jika tidak tersedia
 func getEnv(key, defaultValue string) string {
-    if value := os.Getenv(key); value != "" {
-        return value
-    }
-    return defaultValue
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
 }

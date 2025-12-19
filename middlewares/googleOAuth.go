@@ -1,5 +1,5 @@
 // middleware/google_oauth.go
-package middleware
+package middlewares
 
 import (
 	"chat-backend/config"
@@ -8,7 +8,6 @@ import (
 	"net/http"
 
 	"golang.org/x/oauth2"
-	"golang.org/x/oauth2/google"
 	"google.golang.org/api/oauth2/v2"
 	"google.golang.org/api/option"
 
@@ -37,14 +36,17 @@ func GoogleOAuthCallback(cfg *config.Config) gin.HandlerFunc {
 			return
 		}
 
-		// Create a new OAuth2 service using the token
-		oauthService, err := oauth2.NewService(context.TODO(), option.WithTokenSource(cfg.GoogleOAuthConfig.TokenSource(context.TODO(), token)))
+		// Create a new OAuth2 client using the token
+		client := cfg.GoogleOAuthConfig.Client(context.TODO(), token)
+
+		// Create a new OAuth2 service using the client
+		oauthService, err := oauth2.NewService(context.TODO(), option.WithHTTPClient(client))
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error creating OAuth service"})
 			return
 		}
 
-		userInfo, err := oauthService.Userinfo.V2.Me.Get().Do()
+		userInfo, err := oauthService.Userinfo.Get().Do()
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get user info"})
 			return

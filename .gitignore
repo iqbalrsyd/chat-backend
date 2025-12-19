@@ -1,2 +1,4 @@
 .env
 /vendor/
+.claude
+go.sum

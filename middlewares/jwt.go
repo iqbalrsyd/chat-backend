@@ -1,4 +1,4 @@
-package middleware
+package middlewares
 
 import (
 	"chat-backend/config"
@@ -9,10 +9,9 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v4"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
-	"github.com/golang-jwt/jwt/v4"
 )
 
 var jwtSecret []byte
